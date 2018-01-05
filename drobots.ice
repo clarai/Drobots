@@ -55,4 +55,3 @@ module drobots {
       throws GameInProgress, InvalidProxy, InvalidName;
   };
 };
-

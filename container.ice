@@ -1,5 +1,4 @@
 // -*- mode:c++ -*-
-
 module Services {
   exception AlreadyExists { string key; };
   exception NoSuchKey { string key; };
@@ -9,6 +8,6 @@ module Services {
   interface Container {
     void link(string key, Object* proxy) throws AlreadyExists;
     void unlink(string key) throws NoSuchKey;
-    ObjectPrxDict list(int dic, int pid);
+    ObjectPrxDict list();
   };
 };

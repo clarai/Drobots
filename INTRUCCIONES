@@ -1,0 +1,12 @@
+INSTRUCCIONES
+
+Para ejecutar el programa, se deben descomprimir todos los ficheros en una misma carpeta. Una vez hecho esto, abrimos un terminal y cambiamos el directorio hasta la carpeta con los ficheros fuente. Finalmente, escribimos la orden "make" y pulsamos intro, para que el Makefile se encargue de lanzar cada una de las terminales y ejecutar los distintos ficheros que componen el programa.
+
+ANOTACIÓN
+
+Pese a que la práctica no está completamente funcional, se han implementado algunos métodos que, aunque actualmente no se usan, están previstos para un futuro arreglo.
+
+AUTORÍA
+La práctica ha sido realizada por:
+	- Andrés Montoro Montarroso
+	- Clara Isabel Sotomayor Dorado

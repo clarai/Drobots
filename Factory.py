@@ -1,63 +1,96 @@
 import Ice
+import sys
+Ice.loadSlice('factory.ice --all -I .')
+Ice.loadSlice('container.ice --all -I .')
+import drobots
+import Services
+import socket
+
+
+
+
+class RobotControllerFactoryI(drobots.RobotControllerFactory):
+	def make(self, robot, identifier, current=None):
+		if(robot.ice_isA("::drobots::Attacker")):
+			print("----Creating Attacker Controller----")
+			servant = RobotControllerAttackerI(robot, identifier)
+			print("Attacker Controller created!!!!")
+		else:
+			print("----Creating Defender Controller----")
+			servant = RobotControllerDefenderI(robot, identifier)
+			print("Defender Controller created!!!!")
+
+		robotprx = current.adapter.addWithUUID(servant)
+		current.adapter.createDirectProxy(robotprx.ice_getIdentity())
+		robot_prx = drobots.RobotControllerFactoryPrx.uncheckedCast(robotprx)
+		print(robot_prx)
+
+		return robot_prx
+
+
+class RobotControllerDefenderI(drobots.RobotController):
+	def __init__(self, robot, identificator):
+		self.robot = robot
+		self.identificator = identificator
+
+	def turn(self, current=None):
+		print("----Defensor Turn {}----".format(self.identificator))
+
+	def robotDestroyed(self, current=None):
+		print("----Robot destroyed: {}----".format(self.identificator))
+
+	def location():
+		print("----{} location has been sent----".format(self.identificator))
+
+	def scan():
+		print("----The robot {} has scanned----".format(self.identificator))
+
+
+class RobotControllerAttackerI(drobots.RobotController):
+	def __init__(self, robot, identificator):
+		self.robot = robot
+		self.identificator = identificator
+
+	def turn(self, current=None):
+		print("----Attacker Turn {}----".format(self.identificator))
+
+	def robotDestroyed(self, current=None):
+		print("----Robot destroyed: {}----".format(self.identificator))
+
+	def location():
+		print("----{} location has been sent----".format(self.identificator))
+
+	def scan():
+		print("----The robot {} has scanned----".format(self.identificator))
+
 
 class Client(Ice.Application):
-    def run(self, argv):
-        broker = self.communicator()
-        adapter = broker.createObjectAdapter("FactoryAdapter")
+	def run(self, argv):
+		broker = self.communicator()
+		adapter = broker.createObjectAdapter("FactoryAdapter")
+		adapter.activate()
 
-        factory_servant = RobotControllerFactoryI()
+		factory_servant = RobotControllerFactoryI()
+		factory_prx = adapter.add(factory_servant, broker.stringToIdentity("factory"))
+		print(factory_prx)
 
-        container_prx = broker.stringToProxy("container -t -e 1.1 @ Container.containerAdapter")
+		sckt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		sckt.connect(("google.es", 80))
+		ip = sckt.getsockname()[0]
+		sckt.close()
 
-        container = Services.ContainerPrx.checkedCast(container_prx)
+		factory_container_prx = broker.stringToProxy("container -t -e 1.1:tcp -h {} -p 6060 -t 60000".format(ip))
+		factory_container = Services.ContainerPrx.checkedCast(factory_container_prx)
 
-        if container == None:
-            raise Ice.NoEndpointException()
-        else:
-            print("Success in connecting to the container")
+		if factory_container == None:
+			raise Ice.NoEndpointException()
+		else:
+			factory_identifier = len(factory_container.list())
+			factory_container.link(str(factory_identifier), factory_prx)
 
-        proxy = adapter.add(factory_servant, broker.stringToIdentify("factory"))
-        print(proxy)
+		sys.stdout.flush()
+		self.shutdownOnInterrupt()
+		broker.waitForShutdown()
 
-        sys.stdout.flush()
-
-        adapter.activate()
-
-        self.shutDownOnnterrupt()
-        broker.waitforShutdown()
-
-        return 0
-
-if __name__ == '__main__':
-    sys.exit(Client().main(sys.argv))
-
-class RobotControllerFactoryI(factory.RobotControllerFactory):
-    def make(self, robot_prx, pid):
-        if(robot_prx.ice_IsA("::drobots::Attacker")):
-            print("Creating Attacker Controller")
-            servant = RobotControllerAttackerI(robot_prx, pid)
-            print("Attacker Controller created")
-        else:
-            print("Creating Defender Controller")
-            servant = RobotControllerDefenderI(robot_prx, pid)
-            print("Defender Controller created")
-        proxy = current.adapter.addWithUUID(servant)
-        current.adapter.createDirectProxy(proxy.ice_getIdentity())
-
-        return 0 #SE PONE ESO PORQUE NO TENEMOS NI IDEA :D
-
-class RobotControllerAttackerI(factory.RobotControllerAttacker):
-    def __init__(self, robot, pid):
-        self.robot = robot
-        self.pid = pid
-
-
-    def location(self, coordinates):
-    def objective(self, coordinates):
-
-
-
-class RobotControllerDefenderI(factory.RobotControllerDefender):
-    def location(self, coordinates):
-
-
+client = Client()
+sys.exit(client.main(sys.argv))

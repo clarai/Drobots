@@ -1,105 +1,93 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8; mode: python; -*-
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 
-import math
 import sys
 import Ice
+import socket
+Ice.loadSlice('factory.ice --all -I .')
+import drobots
+Ice.loadSlice('container.ice --all -I .')
+import Services
 
-Ice.loadSlice('drobots.ice')
-from drobots import (
-    GameInProgress, GamePrx, Player, PlayerPrx, Point, RobotPrx,
-    RobotController, RobotControllerPrx)
+class PlayerI(drobots.Player):
+	def __init__(self, broker):
+		self.broker = broker
+		self.counter = 1
 
+	def makeController(self,robot, current=None):
+		print("--------Creating the controllers--------")
 
-class ControllerI(RobotController):
-    def __init__(self, robot, destination):
-        self.robot = robot
-        self.destination = destination
-        self.current_drive = (0, 0)
+		sckt = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		sckt.connect(("google.es",80))
+		ip=sckt.getsockname()[0]
+		sckt.close()
 
-    def __repr__(self):
-        return "Controller for {0}".format(self.robot)
+		if (self.counter == 4):
+			self.counter = 1
 
-    def turn(self, current=None):
-        pos = self.robot.location()
+		if(self.counter == 1):
+			factory_prx = self.broker.stringToProxy("factory -t -e 1.1:tcp -h {} -p 6062 -t 60000".format(ip))
+		elif(self.counter == 2):
+			factory_prx = self.broker.stringToProxy("factory -t -e 1.1:tcp -h {} -p 6063 -t 60000".format(ip))
+		else:
+			factory_prx = self.broker.stringToProxy("factory -t -e 1.1:tcp -h {} -p 6064 -t 60000".format(ip))
+		self.counter += 1
+		print(factory_prx)
 
-        print('ControllerI %s' % pos)
-
-        relative_x = self.destination.x - pos.x
-        relative_y = self.destination.y - pos.y
-
-        distance = math.hypot(relative_x, relative_y)
-        print('Distance to destination: %s' % distance)
-
-        if relative_x == 0 and relative_y == 0:
-            self.robot.drive(0, 0)
-            return
-
-        angle = int(math.degrees(math.atan2(relative_y, relative_x)) % 360.0)
-
-        speed = 100
-
-        if distance < 10:
-            speed = max(min(100, self.robot.speed() / (10 - distance)), 1)
-
-        if self.current_drive != (angle, speed):
-            print('drive %s %s' % (angle, speed))
-            self.robot.drive(angle, speed)
-            self.current_drive = (angle, speed)
-
-    def gameover(self, current=None):
-        print('ControllerI.gameover')
+		factory = drobots.RobotControllerFactoryPrx.checkedCast(factory_prx)
 
 
-class PlayerI(Player):
-    def __init__(self, adapter):
-        self.adapter = adapter
+		robots_container_prx = self.broker.stringToProxy("container -t -e 1.1:tcp -h {} -p 6061 -t 60000".format(ip))
+		robots_container = Services.ContainerPrx.checkedCast(robots_container_prx)
 
-    def makeController(self, robot_prx, current=None):
-        print('PlayerI.makeController')
-        print('robot proxy: %s' % robot_prx)
+		robot_identity = len(robots_container.list())
 
-        controller = ControllerI(robot_prx, Point(x=500, y=500))
-        prx = self.adapter.addWithUUID(controller)
+		robot_prx = factory.make(robot, robot_identity)
 
-        return RobotControllerPrx.uncheckedCast(prx)
+		robots_container.link(robot_identity, robot_prx)
 
-    def win(self, current=None):
-        print('I win!!!!')
-        current.adapter.getCommunicator().shutdown()
+		return robot_prx
 
-    def lose(self, current=None):
-        print('I lose :-( !!!')
-        current.adapter.getCommunicator().shutdown()
+	def win(self, current=None):
+		print("--------YOU WIN, CONGRATULATIONS!!--------")
+		current.adapter.getCommunicator().shutdown()
 
-    def gameAbort(self, current=None):
-        print('Game aborted. Exiting')
-        current.adapter.getCommunicator().shutdown()
+	def lose(self, current=None):
+		print("--------YOU LOSE, GOOD LUCK NEXT TIME!!--------")
+		current.adapter.getCommunicator().shutdown()
 
+	def gameAbort(self, current=None):
+		print("--------GAME ABORTED--------")
+		current.adapter.getCommunicator().shutdown()
 
 class PlayerApp(Ice.Application):
-    def run(self, args):
-        adapter = self.communicator().createObjectAdapter("PlayerAdapter")
+	def run(self, argv):
+		broker = self.communicator()
+		adapter = broker.createObjectAdapter("PlayerAdapter")
+		adapter.activate()
 
-        servant = PlayerI(adapter)
-        player_prx = PlayerPrx.uncheckedCast(adapter.addWithUUID(servant))
-        adapter.activate()
+		game_prx = drobots.GamePrx.checkedCast(broker.stringToProxy(argv[1]))
 
-        game_prx = GamePrx.checkedCast(self.communicator().stringToProxy(
-            args[1]))
+		servant = PlayerI(broker)
 
-        try:
-            game_prx.login(player_prx, str('profesor'))
+		player_prx = drobots.PlayerPrx.uncheckedCast(adapter.createDirectProxy
+			(adapter.addWithUUID(servant).ice_getIdentity()))
 
-        except GameInProgress:
-            print('Game in progress. Try again later')
-            return 1
+		nick = argv[2]
 
-        self.shutdownOnInterrupt()
-        self.communicator().waitForShutdown()
+		try:
+			game_prx.login(player_prx, nick)
+			print("--------You've loged in--------")
+			print("In the server {} with the nick {}".format(argv[1], argv[2]))
 
-        return 0
+		except drobots.GameInProgress:
+			print("--------GAME IN PROGRESS - TRY AGAIN LATER--------")
+			return 1
+		self.shutdownOnInterrupt()
+		broker.waitForShutdown()
+
+		return 0
 
 
-if __name__ == '__main__':
-    sys.exit(PlayerApp().main(sys.argv))
+player = PlayerApp()
+sys.exit(player.main(sys.argv))
